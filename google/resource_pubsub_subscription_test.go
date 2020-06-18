@@ -118,6 +118,30 @@ func TestAccPubsubSubscription_push(t *testing.T) {
 	})
 }
 
+func TestAccPubsubSubscription_retryPolicy(t *testing.T) {
+	t.Parallel()
+
+	topic := fmt.Sprintf("tf-test-topic-%s", randString(t, 10))
+	subscription := fmt.Sprintf("tf-test-sub-%s", randString(t, 10))
+
+	vcrTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckPubsubSubscriptionDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccPubsubSubscription_retryPolicy(topic, subscription, "bar", 30, 300),
+			},
+			{
+				ResourceName:      "google_pubsub_subscription.foo",
+				ImportStateId:     subscription,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 // Context: terraform-providers/terraform-provider-google#4993
 // This test makes a call to GET an subscription before it is actually created.
 // The PubSub API negative-caches responses so this tests we are
@@ -210,6 +234,27 @@ resource "google_pubsub_subscription" "foo" {
   }
 }
 `, saAccount, topicFoo, subscription)
+}
+
+func testAccPubsubSubscription_retryPolicy(topic, subscription, label string, min, max int) string {
+	return fmt.Sprintf(`
+resource "google_pubsub_topic" "foo" {
+  name = "%s"
+}
+
+resource "google_pubsub_subscription" "foo" {
+  name  = "%s"
+  topic = google_pubsub_topic.foo.id
+  labels = {
+    foo = "%s"
+  }
+  ack_deadline_seconds = 10
+  retry_policy {
+    minimum_backoff = %d
+    maximum_backoff = %d
+  }
+}
+`, topic, subscription, label, min, max)
 }
 
 func testAccPubsubSubscription_basic(topic, subscription, label string, deadline int) string {
